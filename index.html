@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>分享卡片</title>
+<style>
+ body{font-family:-apple-system,"PingFang TC","Noto Sans TC",sans-serif;margin:0;padding:32px 20px;background:#f5f7fa;color:#111;text-align:center}
+ #msg{font-size:26px;line-height:1.6;margin-top:40px}
+ button{font-size:26px;padding:16px 28px;margin-top:28px;border:0;border-radius:12px;background:#12355B;color:#fff}
+ .err{color:#B91C1C}
+</style>
+</head>
+<body>
+<div id="msg">準備分享中…</div>
+<button id="again" style="display:none">再分享一次</button>
+<button id="close" style="display:none">關閉</button>
+<!-- 這個頁面不含任何密碼或權杖；卡片內容由網址的 c 參數帶入（壓縮），字典 dict-v1.txt 只含版面結構。 -->
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js" charset="utf-8"></script>
+<script src="pako_inflate.min.js"></script>
+<script>
+(function () {
+  var $ = function (id) { return document.getElementById(id); };
+  function show(t, bad) { $("msg").textContent = t; $("msg").className = bad ? "err" : ""; }
+  function params() {
+    var p = new URLSearchParams(location.search);
+    var st = p.get("liff.state");               // 第一次從 liff.line.me 轉過來時，參數包在 liff.state 裡
+    if (st) {
+      var q = st.indexOf("?");
+      if (q >= 0) new URLSearchParams(st.slice(q + 1)).forEach(function (v, k) { if (!p.has(k)) p.set(k, v); });
+    }
+    return p;
+  }
+  function b64urlToBytes(s) {
+    s = s.replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "=";
+    var bin = atob(s), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+  function decode(c, v) {
+    return fetch("dict-v" + v + ".txt", { cache: "force-cache" })
+      .then(function (r) { if (!r.ok) throw new Error("字典讀取失敗"); return r.text(); })
+      .then(function (d) {
+        var json = pako.inflateRaw(b64urlToBytes(c), { dictionary: b64urlToBytes(d.trim()), to: "string" });
+        var m = JSON.parse(json);
+        if (!m || m.type !== "flex" || !m.contents) throw new Error("卡片格式不對");
+        return m;
+      });
+  }
+  var card = null;
+  function share() {
+    $("again").style.display = "none";
+    show("請選擇要分享的朋友或群組");
+    return liff.shareTargetPicker([card], { isMultiple: true }).then(function (res) {
+      if (res && res.status === "success") {
+        show("已分享 ✓");
+        setTimeout(function () { liff.closeWindow(); }, 800);
+      } else {
+        show("已取消分享");
+        $("again").style.display = ""; $("close").style.display = "";
+      }
+    });
+  }
+  var p = params();
+  var liffId = p.get("l"), c = p.get("c"), v = p.get("v") || "1";
+  if (!liffId || !c) { show("網址不完整，請回到 LINE 重新按「分享給朋友」。", true); return; }
+  liff.init({ liffId: liffId }).then(function () {
+    if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return Promise.reject("login"); }
+    if (!liff.isApiAvailable("shareTargetPicker")) throw new Error("這支手機的 LINE 不支援分享，請更新 LINE 後再試。");
+    return decode(c, v);
+  }).then(function (m) { card = m; return share(); })
+    .catch(function (e) {
+      if (e === "login") return;
+      show("分享失敗：" + (e && e.message ? e.message : e), true);
+      $("close").style.display = "";
+    });
+  $("again").onclick = function () { share().catch(function (e) { show("分享失敗：" + (e.message || e), true); }); };
+  $("close").onclick = function () { try { liff.closeWindow(); } catch (e) { window.close(); } };
+})();
+</script>
+</body>
+</html>
