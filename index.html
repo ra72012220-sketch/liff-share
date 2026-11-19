@@ -50,7 +50,16 @@
   }
   var card = null;
   function share() {
-    $("again").style.display = "none";
+    function errText(e) {
+    if (!e) return "未知錯誤";
+    var t = [];
+    if (e.code) t.push("[" + e.code + "]");
+    if (e.message) t.push(e.message);
+    try { var j = JSON.stringify(e); if (j && j !== "{}") t.push(j); } catch (x) {}
+    try { t.push("（" + (liff.isInClient() ? "LINE 內" : "外部瀏覽器") + "，" + liff.getOS() + "）"); } catch (x) {}
+    return t.length ? t.join(" ") : String(e);
+  }
+  $("again").style.display = "none";
     show("請選擇要分享的朋友或群組");
     return liff.shareTargetPicker([card], { isMultiple: true }).then(function (res) {
       if (res && res.status === "success") {
@@ -72,10 +81,10 @@
   }).then(function (m) { card = m; return share(); })
     .catch(function (e) {
       if (e === "login") return;
-      show("分享失敗：" + (e && e.message ? e.message : e), true);
+      show("分享失敗：" + errText(e), true);
       $("close").style.display = "";
     });
-  $("again").onclick = function () { share().catch(function (e) { show("分享失敗：" + (e.message || e), true); }); };
+  $("again").onclick = function () { share().catch(function (e) { show("分享失敗：" + errText(e), true); }); };
   $("close").onclick = function () { try { liff.closeWindow(); } catch (e) { window.close(); } };
 })();
 </script>
